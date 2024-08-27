@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merlyn</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+    <header class="header">
+        <img src="https://cdn.prod.website-files.com/65d78ed0f211802309a86372/65d78ed0f211802309a867c1_mobile_logo.svg"
+            alt="Logo" class="logo" />
+        <div class="user-info">
+            <span id="user-email"></span>
+            <button id="logout-button">Salir</button>
+        </div>
+    </header>
+
+    <div class="chat-container">
+        <div id="chat-window" class="chat-window">
+            <div class="ai-message">
+                <p>¡Hola! ¿En qué puedo ayudarte hoy? Si tienes alguna pregunta sobre el Programa SerNissan, los roles y
+                    responsabilidades en la red de concesionarios Nissan en Chile, o cualquier otro tema relacionado, no
+                    dudes en decírmelo. Estoy aquí para asistirte.</p>
+            </div>
+        </div>
+        <div id="loading" class="loading">Pensando...</div>
+        <button id="clear-chat-button" class="clear-chat-button">Limpiar Chat</button> <!-- Added Clear Chat Button -->
+        <div class="input-container">
+            <textarea id="user-input" placeholder="Escribe tu pregunta..."></textarea>
+            <button id="send-button">Enviar</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+
+        const API_URL = 'http://localhost:8000';
+
+        window.onload = function () {
+            const token = localStorage.getItem('access_token');
+
+            if (token) {
+                const decodedToken = parseJwt(token);
+                const email = decodedToken.sub;
+
+                // Display email in the header
+                document.getElementById('user-email').textContent = email;
+
+                // Fetch chat history
+                fetchChatHistory(token);
+            } else {
+                document.location.href = "/login.html"; // Redirect to login if token is not found
+            }
+
+            // Logout functionality
+            document.getElementById('logout-button').addEventListener('click', function () {
+                localStorage.removeItem('access_token'); // Remove the token from local storage
+                fetch(`${API_URL}/chat`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` // Add the token to the Authorization header
+                    }
+                });
+                document.location.href = "/login.html"; // Redirect to login page
+            });
+
+            // Clear chat functionality
+            document.getElementById('clear-chat-button').addEventListener('click', function () {
+                clearChat();
+            });
+        };
+
+        // Function to parse the JWT token and extract the email
+        function parseJwt(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            return JSON.parse(jsonPayload);
+        }
+
+        function fetchChatHistory(token) {
+            // Show the loading indicator before fetching the chat history
+            showLoadingIndicator();
+
+            fetch(`${API_URL}/chat`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // Add the token to the Authorization header
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        data.forEach(message => {
+                            appendMessage(message.role, message.content);
+                        });
+                    } else {
+                        console.error('Unexpected response format:', data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching chat history:', error);
+                    document.location.href = "/login.html"; // Redirect to login page if there's an error
+                })
+                .finally(() => {
+                    // Hide the loading indicator after the chat history is fetched
+                    hideLoadingIndicator();
+                });
+        }
+
+        // Chat functionality
+        document.getElementById('send-button').addEventListener('click', function () {
+            sendMessage();
+        });
+
+        document.getElementById('user-input').addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const userInput = document.getElementById('user-input').value.trim();
+            if (userInput !== '') {
+                appendMessage('user', userInput);
+                document.getElementById('user-input').value = '';
+
+                // Show loading indicator and disable input
+                showLoadingIndicator();
+
+                // Send message to AI and get response
+                sendMessageToAI(userInput);
+            }
+        }
+
+        function appendMessage(sender, message) {
+            const chatWindow = document.getElementById('chat-window');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = sender === 'user' ? 'user-message' : 'ai-message';
+
+            if (sender === 'assistant') {
+                // Convert Markdown to HTML
+                messageDiv.innerHTML = marked.parse(message);
+            } else {
+                // For user messages, just use text content
+                messageDiv.textContent = message;
+            }
+
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        function showLoadingIndicator() {
+            const loadingIndicator = document.getElementById('loading');
+            loadingIndicator.style.display = 'block';
+
+            // Disable input and button
+            document.getElementById('user-input').disabled = true;
+            document.getElementById('send-button').disabled = true;
+        }
+
+        function hideLoadingIndicator() {
+            const loadingIndicator = document.getElementById('loading');
+            loadingIndicator.style.display = 'none';
+
+            // Re-enable input and button
+            document.getElementById('user-input').disabled = false;
+            document.getElementById('send-button').disabled = false;
+
+            // Focus the input field again for convenience
+            document.getElementById('user-input').focus();
+        }
+
+        function sendMessageToAI(message) {
+            const token = localStorage.getItem('access_token'); // Retrieve the token from local storage
+
+            fetch(`${API_URL}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // Add the token to the Authorization header
+                },
+                body: JSON.stringify({ message: message })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    appendMessage('assistant', data.response);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.location.href = "/login.html";
+                    appendMessage('assistant', 'Sorry, something went wrong.');
+                })
+                .finally(() => {
+                    // Hide loading indicator and re-enable input once the response is received
+                    hideLoadingIndicator();
+                });
+        }
+
+        function clearChat() {
+            const chatWindow = document.getElementById('chat-window');
+            const messages = chatWindow.children;
+
+            if (messages.length > 1) {
+                // Remove all elements except the first one
+                while (chatWindow.children.length > 1) {
+                    chatWindow.removeChild(chatWindow.lastChild);
+                }
+            }
+
+            // Send DELETE request to clear chat history on the server
+            const token = localStorage.getItem('access_token');
+
+            fetch(`${API_URL}/chat`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // Add the token to the Authorization header
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to clear chat history on the server.');
+                    }
+                    console.log('Chat history cleared on the server.');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+
+    </script>
+</body>
+
+</html>

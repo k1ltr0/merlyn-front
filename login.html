@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merlyn</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body class="flex">
+    <!-- Formulario de Inicio de Sesión -->
+    <div id="login-container" class="login-container">
+        <h2>Iniciar Sesión</h2>
+        <input type="text" id="username" placeholder="Nombre de usuario" required>
+        <input type="password" id="password" placeholder="Contraseña" required>
+        <button id="login-button">Iniciar</button>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        document.getElementById('login-button').addEventListener('click', async function () {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username: username, password: password })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Nombre de usuario o contraseña incorrectos');
+                }
+
+                const data = await response.json();
+                localStorage.setItem('access_token', data.access_token);
+
+                // Redirect to the home page after successful login
+                window.location.href = "/";
+            } catch (error) {
+                alert(error.message);
+            }
+        });
+    </script>
+</body>
+
+</html>
